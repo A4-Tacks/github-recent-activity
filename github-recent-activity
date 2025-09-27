@@ -41,7 +41,7 @@ esac || getopts hi:p:L:A:c: opt; do case "$opt" in
         echo
         printf '%s\n' \
             'Options:' \
-            '    -i <names>         ignore types' \
+            '    -i <names>         ignore types (default: CreateEvent,PushEvent,DeleteEvent)' \
             '    -p <page>          page number' \
             '    -L <limit>         per page limit' \
             '    -A <name>          set user name' \
