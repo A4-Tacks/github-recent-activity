@@ -32,10 +32,7 @@ color=auto
 
 args=()
 OPTIND=1
-while case "${!OPTIND---}" in
-    -*?)false;;
-    *)  args+=("${!OPTIND}"); ((++OPTIND)); continue
-esac || getopts hi:p:L:A:c: opt; do case "$opt" in
+while getopts hi:p:L:A:c: opt; do case "$opt" in
     h)
         printf 'Usage: %q [Options]\n' "${0##*/}"
         echo
