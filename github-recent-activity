@@ -1,0 +1,118 @@
+#!/usr/bin/bash
+set -o nounset
+set -o errtrace
+set -o pipefail
+function CATCH_ERROR { # {{{
+    local __LEC=$? __i __j
+    echo "Traceback (most recent call last):" >&2
+    for ((__i = ${#FUNCNAME[@]} - 1; __i >= 0; --__i)); do
+        printf '  File %q line %s in %q\n' >&2 \
+            "${BASH_SOURCE[__i]}" \
+            "${BASH_LINENO[__i]}" \
+            "${FUNCNAME[__i]}"
+        if ((BASH_LINENO[__i])) && [ -f "${BASH_SOURCE[__i]}" ]; then
+            for ((__j = 0; __j < BASH_LINENO[__i]; ++__j)); do
+                read -r REPLY
+            done < "${BASH_SOURCE[__i]}"
+            printf '    %s\n' "$REPLY" >&2
+        fi
+    done
+    echo "Error: [ExitCode: ${__LEC}]" >&2
+    exit "${__LEC}"
+}
+trap CATCH_ERROR ERR # }}}
+
+hash jq git wget
+
+user=''
+page=1
+limit=30
+ignore=''
+color=auto
+
+args=()
+OPTIND=1
+while case "${!OPTIND---}" in
+    -*?)false;;
+    *)  args+=("${!OPTIND}"); ((++OPTIND)); continue
+esac || getopts hi:p:L:A:c: opt; do case "$opt" in
+    h)
+        printf 'Usage: %q [Options]\n' "${0##*/}"
+        echo
+        printf '%s\n' \
+            'Options:' \
+            '    -i <names>         ignore types' \
+            '    -p <page>          page number' \
+            '    -L <limit>         per page limit' \
+            '    -A <name>          set user name' \
+            '    -c <name>          set use color (auto,always,never)' \
+            '    -h                 show help' \
+            && exit
+        ;;
+    i) ignore=$OPTARG;;
+    p) page=$OPTARG;;
+    L) limit=$OPTARG;;
+    A) user=$OPTARG;;
+    c) color=$OPTARG;;
+    :|\?)
+        ((--OPTIND <= 0)) && OPTIND=1
+        printf '%q: parse args failed, near by %q\n' "$0" "${!OPTIND}" >&2
+        exit 2
+esac done
+set -- "${args[@]}" "${@:OPTIND}"
+if [ $# -ne 0 ]; then
+    printf '%q: unexpected arg %q\n' "$0" "$1" >&2
+    exit 2
+fi
+
+user=${user:-$(git config get user.name)}
+case "$color" in
+    auto) test -t 1 && color=1 || color='';;
+    always) color=1;;
+    *) color='';;
+esac
+
+url="https://api.github.com/users/$user/events?page=$page&per_page=$limit"
+
+wget -nv -O - -- "$url" | jq -rc \
+    --arg ignore "${ignore:-CreateEvent,PushEvent,DeleteEvent}" \
+    --arg color "$color" \
+'
+def fi($n): "\(.)\(" "*($n-length))";
+def csim(seq): if $color | length != 0 then [seq]|"\u001b[\(join(";"))m" else "" end;
+def csim: csim(empty);
+def each: if type == "array" then .[] end;
+def fmtblock($ws):
+  if test("\n") then
+    sub("\n*$"; "")
+    | split("\n")
+    | select(length <= 6) // .[:6]+["..."]
+    | ["\n\($ws)"+.[]]
+    | add
+  end;
+
+($ignore|[{key:splits(",")}]|from_entries) as $ignore
+| reverse[]
+| select(.type | in($ignore) | not)
+| "\(csim(1))\(.type|fi(29))at \(.repo.name)\(csim)" as $info
+| first(...title? | values) // null as $title
+| .payload
+| first(.comment, .pull_request, .issue, .repo | values) // .
+| $info
+, "# \($title | values)"
+, (each
+    | { id:.number,
+        user:.user.login//.author.name,
+        state,
+        ref,
+        ref_type,
+        body,
+        url,
+      }?
+    | (.ref_type) |= select(. == "repository")
+    | map_values(values)
+    | to_entries[]
+    | "- \(.key): \(.value|@text|fmtblock("  "))"
+  )
+
+'
