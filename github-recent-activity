@@ -94,7 +94,7 @@ def fmtblock($ws):
 | "\(csim(1))\(.type|fi(29))at \(.repo.name)\(csim)" as $info
 | first(...title? | values) // null as $title
 | .payload
-| first(.comment, .pull_request, .issue, .repo | values) // .
+| .comment // .pull_request // .issue // .repo // .
 | $info
 , "# \($title | values)"
 , (each
